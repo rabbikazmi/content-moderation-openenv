@@ -8,53 +8,39 @@
 
 **Bridging AI and Computational Social Science**: An intelligent content moderation environment where agents learn to classify user-generated content and protect digital communities at scale.
 
----
-
 ## The Problem: Why Content Moderation?
 
-Every second, over 500 hours of video content is uploaded to YouTube alone. Across Meta's platforms, X (Twitter), TikTok, and Reddit, billions of pieces of content are created daily. Human moderation cannot scale. While trained moderators can review perhaps a few hundred pieces of content per day, the volume far exceeds human capacity. This mismatch creates a critical gap: harmful content—from hate speech and violence incitement to child exploitation material—spreads faster than it can be removed.
+Every second, over 500 hours of video content is uploaded to YouTube alone. Across Meta's platforms, X (Twitter), TikTok, and Reddit, billions of pieces of content are created daily. Human moderation alone cannot scale. Trained moderators can review maybe a few hundred pieces per day, but the volume dwarfs human capacity. This creates a dangerous gap: harmful content from hate speech to violence incitement to exploitation spreads far faster than it gets removed.
 
-Content moderation sits at a crucial intersection of computer science and Computational Social Science (CSS). CSS investigates how computational tools shape human behavior online, influence information flow, and affect collective outcomes. A well-trained AI moderation agent does more than flag spam—it actively reduces radicalization pipelines, protects vulnerable communities, maintains psychological safety in online spaces, and upholts platform values at scale. Meta, in particular, has made protecting people from harmful content a core business and ethical responsibility. Billions of users depend on effective moderation systems operating 24/7 across dozens of languages and cultural contexts.
+Content moderation sits at the intersection of computer science and Computational Social Science (CSS). CSS explores how computational systems shape human behavior online, influence information spread, and affect collective outcomes. A well-trained AI moderation agent does more than flag spam. It breaks radicalization pipelines, shields vulnerable communities, preserves psychological safety in communities, and scales platform values across billions of users. For Meta and similar platforms, protecting people from harmful content isn't just business strategy. It's a core ethical responsibility. Billions of people rely on these systems working 24/7 across dozens of languages and cultural contexts.
 
 This environment simulates the exact decision-making pipeline that production moderation systems use: receive content in context, classify it, assign confidence, compute feedback, and improve. By building agents that excel in this domain, we contribute to safer digital ecosystems and demonstrate that AI can be a force for social good when applied thoughtfully to meaningful problems.
-
----
 
 ## What This Environment Does
 
 Content Moderation OpenEnv provides a reinforcement learning setting where AI agents learn to classify user-generated content across five categories (safe, spam, hate_speech, violence, adult_content) under varying difficulty levels. Agents observe content text and platform context, submit moderation decisions with confidence scores, and receive rewards based on correctness and calibration. The agent loop repeats over seven samples per task, three difficulty tiers per episode, with cumulative scoring encouraging both accuracy and responsible uncertainty quantification.
 
-```
-┌─────────────────────────────────────────────┐
-│       Content Moderation OpenEnv            │
-│     (FastAPI Server + LLM Agent Loop)       │
-└─────────────────────────────────────────────┘
-            │
-            ▼
-┌─────────────────┐          POST /reset       ┌──────────────┐
-│                 │──────────────────────────►  │              │
-│   AI Agent      │                            │  Environment │
-│ (LLM-powered)   │  observation{}             │  (FastAPI)   │
-│ Classification  │ ◄────────────────────────  │              │
-│                 │                            │  30 Samples  │
-└─────────────────┘                            │  3 Difficulty│
-        │                                       │  Levels      │
-        │     POST /step                        └──────────────┘
-        │     {label, confidence}                      │
-        │────────────────────────────────────────────►│
-        │                                              │
-        │    {reward, done, next_observation}         │
-        │◄──────────────────────────────────────────  │
-        │
-        ▼
-┌─────────────────────────────┐
-│   Cumulative Score          │
-│   Range: 0.0 to 21.0        │
-│   (7 samples × 3.0 max)     │
-└─────────────────────────────┘
-```
+```mermaid
+sequenceDiagram
+    participant Agent as LLM Agent
+    participant Env as FastAPI Environment
+    participant Reward as Reward Engine
 
----
+    Note over Agent,Reward: Episode Start
+    Agent->>Env: POST /reset {task_id}
+    Env->>Env: Load 7 samples<br/>(Easy/Medium/Hard)
+    Env->>Agent: Observation {text, context}
+
+    loop For each content sample
+        Agent->>Agent: Analyze content<br/>Generate decision
+        Agent->>Env: POST /step {label, confidence}
+        Env->>Reward: Compute reward<br/>(correctness + calibration)
+        Reward->>Env: Reward score
+        Env->>Agent: {reward, next_observation, done}
+    end
+
+    Env->>Agent: Final episode<br/>Cumulative score (0-21)
+```
 
 ## Task Design
 
@@ -68,8 +54,6 @@ Each task presents content samples of increasing complexity, testing the agent's
 
 Task 3 deserves special attention. In real moderation, the *same text* can be safe or harmful depending on context. For example: "She's so hot and beautiful!" is safe on a dating forum but adult_content on a children's platform. "Die you noob! Get rekt!" is playful banter in gaming chat but violence on a threat-reporting system. This mirrors production complexity where agents must consider not just content but *where* content appears. A well-trained agent learns this crucial distinction.
 
----
-
 ## Reward Function
 
 Moderation agents are rewarded not just for accuracy but for calibrated confidence. The four-tier reward structure reflects production system priorities:
@@ -82,8 +66,6 @@ Moderation agents are rewarded not just for accuracy but for calibrated confiden
 | Wrong label | ≥ 0.4 | 0.0 | Wrong & overconfident: most harmful outcome |
 
 This design reflects a crucial insight: an overconfident mistake in content moderation causes more harm than an uncertain prediction that escalates to human review. A system that confidently misclassifies violent content as safe can radicalize users. A system that flags borderline content for human review protects both accuracy and user experience. Reward structures embed societal values.
-
----
 
 ## Observation and Action Spaces
 
@@ -102,8 +84,6 @@ This design reflects a crucial insight: an overconfident mistake in content mode
 | `label` | enum | safe, spam, hate_speech, violence, adult_content | Moderation classification |
 | `confidence` | float | 0.0 to 1.0 | Agent's confidence in the classification |
 
----
-
 ## Baseline Results
 
 Evaluated with **Qwen/Qwen2.5-7B-Instruct** via HuggingFace Inference API Router:
@@ -117,36 +97,31 @@ Evaluated with **Qwen/Qwen2.5-7B-Instruct** via HuggingFace Inference API Router
 
 Perfect performance on easy tasks demonstrates the LLM's strong grasp of obvious spam and clearly safe content. The 71.4% on medium tasks reflects growing difficulty with borderline language and implicit violations. The 57.1% on hard tasks exposes genuine real-world challenges: context-dependent decisions require reasoning about platform norms, user populations, and nuanced language interpretation. This performance profile mirrors human moderator capabilities and validates the environment's difficulty scaling.
 
----
-
 ## Quick Start
 
-### Prerequisites
-- Python 3.11+
-- pip or conda
-- Valid HuggingFace API token (read access)
+**Setup is simple**: Python 3.11+, pip or conda, and a HuggingFace API token with read access.
 
-### 1. Clone the Repository
+Clone and install the project with these commands:
 
 ```bash
 git clone https://github.com/yourusername/content-moderation-openenv.git
 cd content-moderation-openenv
 ```
 
-### 2. Create and Activate Virtual Environment
+Set up a clean Python environment:
 
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-### 3. Install Dependencies
+Get dependencies installed:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure Environment Variables
+Point the .env file at your HuggingFace setup:
 
 ```bash
 cp .env.example .env
@@ -159,50 +134,44 @@ MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
 HF_TOKEN=your_huggingface_read_token_here
 ```
 
-### 5. Start the FastAPI Server
-
-Open a terminal and run:
+Get the server running in one terminal:
 
 ```bash
 python main.py
 ```
 
-Server will be available at `http://localhost:7860`. Verify with:
+Verify it's actually running:
 
 ```bash
 curl http://localhost:7860/health
 # Expected: {"status":"ok"}
 ```
 
-### 6. Run Inference
-
-Open another terminal and run:
+Run the agent in another terminal window:
 
 ```bash
 python inference.py
 ```
 
-This runs the LLM agent through all 3 tasks, displays per-sample decisions, and saves results to `inference_results.json`.
+This runs the LLM agent through all 3 tasks, shows per-sample decisions, and saves detailed results to `inference_results.json` for analysis.
 
-### 7. Validate All Systems
+Verify everything works correctly:
 
 ```bash
 python validate.py
 ```
 
-Should display: `20 / 20 checks passed` and `Status: READY TO SUBMIT`.
+Should display: `20 / 20 checks passed`.
 
----
+## Docker Guide
 
-## Docker Setup
-
-### Build Docker Image
+### Build the Docker image:
 
 ```bash
 docker build -t content-moderation-openenv:latest .
 ```
 
-### Run Docker Container
+### Run the container:
 
 ```bash
 docker run \
@@ -213,15 +182,11 @@ docker run \
   content-moderation-openenv:latest
 ```
 
-Verify: `curl http://localhost:7860/health`
+Verify the container: `curl http://localhost:7860/health`
 
-### Docker Compose
-
-```bash
+### Or use Docker Compose for a one-command setup:
 docker-compose up
 ```
-
----
 
 ## Environment Variables
 
@@ -231,26 +196,23 @@ docker-compose up
 | `MODEL_NAME` | Yes | LLM model identifier (e.g., Qwen/Qwen2.5-7B-Instruct) |
 | `HF_TOKEN` | Yes | HuggingFace API token with read access |
 
-To generate `HF_TOKEN`:
+Grab your token from HuggingFace:
 1. Visit https://huggingface.co/settings/tokens
 2. Click "New token"
 3. Select "Read" permission
 4. Copy token to `.env`
 
----
-
 ## API Reference
 
 | Method | Endpoint | Request | Response | Description |
 |--------|----------|---------|----------|-------------|
-| GET | `/health` | — | `{"status":"ok"}` | Health check; confirms server is running |
+| GET | `/health` | None | `{"status":"ok"}` | Health check; confirms server is running |
 | POST | `/reset` | `{"task_id":"task_1"}` | `{"text":"...","context":"...","task_id":"...","metadata":{}}` | Initialize episode; returns first observation |
 | POST | `/step` | `{"label":"spam","confidence":0.95}` | `{"reward":1.0,"done":false,"observation":{...},"info":{}}` | Submit action; returns reward and next observation |
-| GET | `/state` | — | `{"task_id":"task_1","current_index":2,"total_samples":7,"cumulative_reward":2.0,"done":false}` | Get current episode state |
-| GET | `/tasks` | — | `[{"task_id":"task_1","name":"...","difficulty":"easy",...},...]` | List all 3 available tasks |
-| GET | `/docs` | — | HTML | Interactive Swagger API documentation |
+| GET | `/state` | None | `{"task_id":"task_1","current_index":2,"total_samples":7,"cumulative_reward":2.0,"done":false}` | Get current episode state |
+| GET | `/tasks` | None | `[{"task_id":"task_1","name":"...","difficulty":"easy",...},...]` | List all 3 available tasks |
+| GET | `/docs` | None | HTML | Interactive Swagger API documentation |
 
----
 
 ## Project Structure
 
@@ -276,15 +238,12 @@ content-moderation-openenv/
 
 ### LLM Integration
 
-The inference agent uses OpenAI-compatible client pointed at HuggingFace Inference API. A system prompt instructs the model to output strict JSON: `{"label":"...", "confidence":0.0-1.0}`. Response parsing handles markdown code blocks and malformed JSON gracefully. Max tokens set to 20 (sufficient for 12-token response, minimizes API cost).
+The agent uses an OpenAI-compatible client connected to the HuggingFace Inference API. A system prompt tells the model to output clean JSON: `{"label":"...", "confidence":0.0-1.0}`. The parser handles markdown blocks and malformed responses gracefully. Max tokens set to 20 to keep responses fast and cheap.
 
 ### Reproducibility
 
-All randomness uses `random.seed(42)` for deterministic shuffling. Same 30-sample dataset across all runs. Results are reproducible given identical LLM responses.
-
----
+Everything uses `random.seed(42)` for deterministic shuffling. The same 30-sample dataset runs on every experiment. Results are reproducible as long as the LLM gives the same responses.
 
 Built with <3
-
 Bridging AI and Computational Social Science
 
