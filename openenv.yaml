@@ -1,0 +1,112 @@
+# Step 7 — openenv.yaml — content-moderation-openenv
+
+name: content-moderation-openenv
+version: 1.0.0
+description: |
+  Content Moderation OpenEnv environment for the Scaler × Meta PyTorch Hackathon.
+  This environment provides a reinforcement learning task for training moderation agents
+  to classify and handle problematic content across multiple categories.
+author: Scaler × Meta PyTorch Hackathon
+license: MIT
+
+# Observation space specification
+observation_space:
+  type: ContentObservation
+  properties:
+    content_id:
+      type: string
+      description: Unique identifier for the content
+    text:
+      type: string
+      description: The text content to moderate
+    context:
+      type: string
+      description: Context of the content
+    metadata:
+      type: object
+      description: Additional metadata about the content
+
+# Action space specification
+action_space:
+  type: ModerationAction
+  properties:
+    label:
+      type: enum
+      values:
+        - safe
+        - spam
+        - hate_speech
+        - violence
+        - adult_content
+      description: The moderation action label
+    confidence:
+      type: float
+      minimum: 0.0
+      maximum: 1.0
+      description: Confidence score for the decision
+    reasoning:
+      type: string
+      description: Optional reasoning behind the action
+
+# Environment endpoints
+endpoints:
+  health: GET /health
+  reset: POST /reset
+  step: POST /step
+  state: GET /state
+  tasks: GET /tasks
+
+# Available tasks
+tasks:
+  task_1:
+    name: Content Safety Moderation
+    description: |
+      Classify content into safe or unsafe categories. This is the foundational task
+      for content moderation. Agents must learn to identify problematic content quickly
+      and accurately.
+    difficulty: easy
+    reward_structure:
+      correct_classification: 1.0
+      timeout_penalty: -0.1
+    max_steps: 10
+
+  task_2:
+    name: Hate Speech Detection
+    description: |
+      Identify and classify hate speech in content. This task focuses on detecting
+      subtle discriminatory language and hateful speech patterns. Higher difficulty
+      due to nuanced language understanding requirements.
+    difficulty: medium
+    reward_structure:
+      correct_classification: 1.0
+      false_positive: -0.5
+      false_negative: -1.0
+    max_steps: 10
+
+  task_3:
+    name: Multi-label Classification
+    description: |
+      Classify content into multiple violation categories simultaneously. This advanced
+      task requires agents to recognize that content may violate multiple policies
+      (e.g., violent AND adult content). Highest difficulty level.
+    difficulty: hard
+    reward_structure:
+      correct_classification: 1.0
+      partial_correct: 0.5
+      incorrect: 0.0
+    max_steps: 10
+
+# Evaluation metrics
+evaluation:
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+  baseline_performance: 0.70
+
+# Server configuration
+server:
+  host: 0.0.0.0
+  port: 7860
+  debug: false
