@@ -248,7 +248,6 @@ Everything uses `random.seed(42)` for deterministic shuffling. The same 30-sampl
 
 ---
 
-Built with <3
-
-Bridging AI and Computational Social Science
+- built with <3
+- bridging AI and computational social science
 
