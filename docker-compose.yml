@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  app:
+    build: .
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", 
+             "import httpx; httpx.get('http://localhost:7860/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  inference:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - API_BASE_URL=${API_BASE_URL}
+      - MODEL_NAME=${MODEL_NAME}
+      - HF_TOKEN=${HF_TOKEN}
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["python", "inference.py"]
