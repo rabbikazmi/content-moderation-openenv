@@ -1,3 +1,11 @@
+---
+title: Content Moderation OpenEnv
+emoji: 🛡️
+colorFrom: blue
+colorTo: red
+sdk: docker
+pinned: false
+---
 # Content Moderation OpenEnv
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
