@@ -18,5 +18,9 @@ def main():
     )
 
 
+# Alias for compatibility with multiple entry points
+start_server = main
+
+
 if __name__ == "__main__":
     main()

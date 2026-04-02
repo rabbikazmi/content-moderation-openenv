@@ -36,12 +36,15 @@ dependencies = [
 ]
 
 [project.scripts]
-serve = "server.app:main"
+serve = "main:start_server"
 
 [project.urls]
 Homepage = "https://github.com/rabbikazmi/content-moderation-openenv"
 "Bug Tracker" = "https://github.com/rabbikazmi/content-moderation-openenv/issues"
 "Source Code" = "https://github.com/rabbikazmi/content-moderation-openenv"
+
+[tool.setuptools.package-dir]
+"" = "."
 
 [tool.setuptools]
 packages = ["server"]

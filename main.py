@@ -423,6 +423,19 @@ async def get_state() -> EnvironmentState:
 
 
 # ============================================================================
+# ENTRY POINT FOR CONSOLE SCRIPT
+# ============================================================================
+
+def start_server():
+    """
+    Entry point for the 'serve' console script.
+    Called by: serve (after pip install)
+    Runs the FastAPI application on 0.0.0.0:7860.
+    """
+    uvicorn.run(app, host="0.0.0.0", port=7860, reload=False)
+
+
+# ============================================================================
 # MAIN BLOCK
 # ============================================================================
 
