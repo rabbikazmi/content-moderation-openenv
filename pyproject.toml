@@ -45,6 +45,3 @@ Homepage = "https://github.com/rabbikazmi/content-moderation-openenv"
 
 [tool.setuptools]
 packages = ["server"]
-
-[tool.setuptools.packages.find]
-where = ["."]
