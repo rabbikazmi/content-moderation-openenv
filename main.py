@@ -426,7 +426,7 @@ async def get_state() -> EnvironmentState:
 # ENTRY POINT FOR CONSOLE SCRIPT
 # ============================================================================
 
-def start_server():
+def main():
     """
     Entry point for the 'serve' console script.
     Called by: serve (after pip install)

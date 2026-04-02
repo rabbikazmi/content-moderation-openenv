@@ -36,7 +36,8 @@ dependencies = [
 ]
 
 [project.scripts]
-server = "main:start_server"
+server = "main:main"
+serve = "main:main"
 
 [project.urls]
 Homepage = "https://github.com/rabbikazmi/content-moderation-openenv"
