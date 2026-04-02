@@ -43,8 +43,8 @@ Homepage = "https://github.com/rabbikazmi/content-moderation-openenv"
 "Bug Tracker" = "https://github.com/rabbikazmi/content-moderation-openenv/issues"
 "Source Code" = "https://github.com/rabbikazmi/content-moderation-openenv"
 
-[tool.setuptools.packages.find]
-where = ["."]
-
 [tool.setuptools]
 packages = ["server"]
+
+[tool.setuptools.packages.find]
+where = ["."]
