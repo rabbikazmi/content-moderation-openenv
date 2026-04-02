@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "content-moderation-openenv"
+version = "1.0.0"
+description = "A real-world content moderation environment for AI agents built for the Scaler x Meta PyTorch Hackathon"
+requires-python = ">=3.10"
+authors = [
+    {name = "Scaler x Meta Hackathon Participant"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+keywords = ["content-moderation", "reinforcement-learning", "openai", "fastapi", "hackathon"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "openai",
+    "httpx",
+    "pyyaml",
+    "python-dotenv",
+]
+
+[project.urls]
+Homepage = "https://github.com/rabbikazmi/content-moderation-openenv"
+"Bug Tracker" = "https://github.com/rabbikazmi/content-moderation-openenv/issues"
+"Source Code" = "https://github.com/rabbikazmi/content-moderation-openenv"
+
+[tool.setuptools]
+packages = ["content_moderation_openenv"]
