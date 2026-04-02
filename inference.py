@@ -1,19 +1,3 @@
-# Step 4 — inference.py — content-moderation-openenv
-
-"""
-Inference script for Content Moderation OpenEnv - Scaler × Meta PyTorch Hackathon
-
-This script runs a content moderation agent against a FastAPI server using
-an LLM (via OpenAI-compatible client) to classify user-generated content.
-The agent runs through all 3 difficulty levels (easy, medium, hard) and
-produces a detailed performance report.
-
-Requirements:
-- FastAPI server running on http://localhost:7860
-- Environment variables: API_BASE_URL, MODEL_NAME, HF_TOKEN
-- Completion time: < 20 minutes on 2 vCPU / 8GB RAM
-"""
-
 import os
 import sys
 import json
@@ -29,10 +13,7 @@ try:
 except ImportError:
     pass
 
-# ============================================================================
-# CONFIGURATION & VALIDATION
-# ============================================================================
-
+# configuration & validation
 API_BASE_URL = os.getenv("API_BASE_URL")
 MODEL_NAME = os.getenv("MODEL_NAME")
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -73,9 +54,7 @@ how certain you are.
 IMPORTANT: Respond ONLY with a valid JSON object. No explanation, no markdown, no code blocks.
 Format: {"label": "one_of_the_categories", "confidence": 0.95}"""
 
-# ============================================================================
-# UTILITIES
-# ============================================================================
+# utilities
 
 
 def call_with_retry(func, retries: int = 3, delay: int = 2) -> Any:
@@ -166,9 +145,7 @@ def validate_label(label: str) -> str:
     return label
 
 
-# ============================================================================
-# MAIN AGENT LOGIC
-# ============================================================================
+# main agent logic
 
 
 def run_task(
@@ -187,11 +164,9 @@ def run_task(
     Returns:
         Dict with task results including score and percentage
     """
-    print(f"\n{'='*60}")
-    print(f"  Running Task: {task_id}")
-    print(f"{'='*60}")
+    print(f"  Running Task: {task_id}\n")
 
-    # ── Reset environment ──────────────────────────────────────
+    # reset environment
     def reset_env():
         response = http_client.post(
             f"{BASE_URL}/reset",
@@ -206,7 +181,7 @@ def run_task(
     step_count = 0
     done = False
 
-    # ── Main agent loop ────────────────────────────────────────
+    # main agent loop
     while not done:
 
         # Build prompt — combine system + user for Mistral compatibility
@@ -220,7 +195,7 @@ def run_task(
             f"Classify this content."
         )
 
-        # ── Call LLM ───────────────────────────────────────────
+        # call llm
         def get_llm_response():
             response = client.chat.completions.create(
                 model=MODEL_NAME,
@@ -241,13 +216,13 @@ def run_task(
             print(f"  ERROR: Failed to get LLM response: {str(e)}")
             llm_response = json.dumps({"label": "safe", "confidence": 0.1})
 
-        # ── Parse and validate LLM output ─────────────────────
+        # parse and validate llm output
         decision = parse_llm_response(llm_response)
         label = validate_label(decision.get("label", "safe"))
         confidence = float(decision.get("confidence", 0.1))
         confidence = max(0.0, min(1.0, confidence))  # Clamp to [0, 1]
 
-        # ── Submit action to environment ───────────────────────
+        # submit action to environment
         def submit_step():
             response = http_client.post(
                 f"{BASE_URL}/step",
@@ -262,14 +237,14 @@ def run_task(
             print(f"  ERROR: Failed to submit step: {str(e)}")
             break
 
-        # ── Extract results ────────────────────────────────────
+        # extract results
         reward = step_result.get("reward", 0.0)
         done = step_result.get("done", False)
         info = step_result.get("info", {})
         ground_truth = info.get("ground_truth", "unknown")
         step_count += 1
 
-        # ── Print progress ─────────────────────────────────────
+        # print progress
         print(
             f"  Sample {step_count:>2}: "
             f"predicted={label:15s} ({confidence:.2f}) "
@@ -277,7 +252,7 @@ def run_task(
             f"| reward={reward:.1f}"
         )
 
-        # ── Advance observation ────────────────────────────────
+        # advance observation
         if not done:
             next_obs = step_result.get("observation")
             if next_obs:
@@ -287,10 +262,10 @@ def run_task(
                 print("  Warning: No next observation received.")
                 break
 
-        # ── Rate limiting ──────────────────────────────────────
+        # rate limiting
         time.sleep(1)
 
-    # ── Get final state ────────────────────────────────────────
+    # get final state
     def get_final_state():
         response = http_client.get(f"{BASE_URL}/state")
         response.raise_for_status()
@@ -324,9 +299,7 @@ def run_task(
     }
 
 
-# ============================================================================
-# MAIN EXECUTION
-# ============================================================================
+# main execution
 
 
 def main() -> None:
@@ -337,20 +310,16 @@ def main() -> None:
     Exits with code 0 on success, code 1 on failure.
     """
 
-    # ── Banner ─────────────────────────────────────────────────
-    print("\n" + "=" * 60)
-    print(" Content Moderation OpenEnv — Inference Script")
-    print("=" * 60)
+    print("\nContent Moderation OpenEnv — Inference Script")
     print(f"Model:  {MODEL_NAME}")
     print(f"API:    {API_BASE_URL}")
     print(f"Tasks:  task_1 (easy) | task_2 (medium) | task_3 (hard)")
-    print("=" * 60)
 
-    # ── Initialize clients ─────────────────────────────────────
+    # initialize clients
     client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
     http_client = httpx.Client(timeout=60.0)
 
-    # ── Health check ───────────────────────────────────────────
+    # health check
     print("\nChecking server health...")
     try:
         response = http_client.get(f"{BASE_URL}/health")
@@ -365,7 +334,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # ── Run all 3 tasks ────────────────────────────────────────
+    # run all 3 tasks
     results = []
     for task_id in ["task_1", "task_2", "task_3"]:
         try:
@@ -378,7 +347,7 @@ def main() -> None:
 
     http_client.close()
 
-    # ── Save results to JSON ────────────────────────────────────
+    # save results to json
     results_data = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "model": MODEL_NAME,
@@ -406,10 +375,8 @@ def main() -> None:
         json.dump(results_data, f, indent=2)
     print(f"[OK] Results saved to inference_results.json\n")
 
-    # ── Final results table ────────────────────────────────────
-    print("\n" + "=" * 60)
-    print(" FINAL RESULTS")
-    print("=" * 60)
+    # final results table
+    print("\n" + "Final Results".center(60))
 
     task_names = {
         "task_1": "Task 1 (Easy)   ",

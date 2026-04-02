@@ -1,16 +1,3 @@
-# Step 3 — main.py — content-moderation-openenv
-
-"""
-FastAPI server for Content Moderation OpenEnv - Scaler × Meta PyTorch Hackathon
-
-This server provides REST API endpoints to interact with a content moderation
-reinforcement learning environment. The environment trains agents to classify
-user-generated content into moderation categories (safe, spam, hate_speech,
-violence, adult_content) across three difficulty levels.
-
-Port: 7860 (hardcoded for Hugging Face Spaces)
-"""
-
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -28,20 +15,14 @@ from models import (
 )
 from environment import ContentModerationEnv
 
-# ============================================================================
-# LOGGING CONFIGURATION
-# ============================================================================
-
+# logging configuration
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-# FASTAPI APP INITIALIZATION
-# ============================================================================
-
+# fastapi app initialization
 app = FastAPI(
     title="Content Moderation OpenEnv",
     version="1.0.0",
@@ -51,16 +32,10 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# ============================================================================
-# GLOBAL STATE
-# ============================================================================
-
-# Single global environment instance shared across all requests
+# global state
 env = ContentModerationEnv()
 
-# ============================================================================
-# PYDANTIC REQUEST/RESPONSE MODELS
-# ============================================================================
+# pydantic request/response models
 
 
 class ResetRequest(BaseModel):
@@ -130,9 +105,7 @@ class WelcomeResponse(BaseModel):
     }
 
 
-# ============================================================================
-# MIDDLEWARE
-# ============================================================================
+# middleware
 
 
 class LoggingMiddleware:
@@ -168,25 +141,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============================================================================
-# STARTUP EVENT
-# ============================================================================
+# startup event
 
 
 @app.on_event("startup")
 async def startup_event() -> None:
     """Print startup message on server start."""
-    print("\n" + "=" * 70)
-    print("Content Moderation OpenEnv server started on port 7860")
+    print("\nContent Moderation OpenEnv server started on port 7860")
     print("Available tasks: task_1 (easy), task_2 (medium), task_3 (hard)")
-    print("Documentation: http://localhost:7860/docs")
-    print("=" * 70 + "\n")
+    print("Documentation: http://localhost:7860/docs\n")
     logger.info("Content Moderation OpenEnv server started")
 
-
-# ============================================================================
-# ENDPOINTS
-# ============================================================================
+# api endpoints
 
 
 @app.get(
@@ -421,10 +387,8 @@ async def get_state() -> EnvironmentState:
             status_code=500, detail=f"Internal error: {str(e)}"
         )
 
+# entry point for console script
 
-# ============================================================================
-# ENTRY POINT FOR CONSOLE SCRIPT
-# ============================================================================
 
 def main():
     """
@@ -435,9 +399,6 @@ def main():
     uvicorn.run(app, host="0.0.0.0", port=7860, reload=False)
 
 
-# ============================================================================
-# MAIN BLOCK
-# ============================================================================
-
+# main block
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=7860, reload=False)

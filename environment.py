@@ -1,5 +1,3 @@
-# Step 2 — environment.py — content-moderation-openenv
-
 import random
 from typing import Optional, List, Dict, Any
 from models import ContentObservation, ModerationAction, StepResult, EnvironmentState, TaskSpec
@@ -7,10 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-# DATASET: 30 labeled content samples across 5 categories and 3 difficulties
-# ============================================================================
-
+# dataset: 30 labeled content samples across 5 categories and 3 difficulties
 DATASET: List[Dict[str, str]] = [
     # EASY DIFFICULTY (10 samples) — Obvious spam, clear safe content
     {

@@ -1,17 +1,3 @@
-# Step 5 — validate.py — content-moderation-openenv
-
-"""
-Comprehensive validation suite for Content Moderation OpenEnv.
-
-Validates all 20 hackathon requirements including API endpoints,
-file structure, environment specification compliance, and deployment readiness.
-
-Assumes FastAPI server is running on localhost:7860.
-
-Run: python validate.py
-Exit codes: 0 (all pass) | 1 (any fail)
-"""
-
 import os
 import sys
 import json

@@ -1,5 +1,3 @@
-# Step 4 — config.py — content-moderation-openenv
-
 import os
 import logging
 from typing import Optional
@@ -48,7 +46,7 @@ class Config:
             warnings.append("HF_TOKEN not set. This may be required for Hugging Face API access.")
         
         for warning in warnings:
-            logger.warning(f"⚠️  {warning}")
+            logger.warning(f" {warning}")
         
         if warnings:
             logger.info(f"Total warnings: {len(warnings)}")

@@ -1,5 +1,3 @@
-# Step 3 — models.py — content-moderation-openenv
-
 from pydantic import BaseModel, Field
 from enum import Enum
 from typing import Optional, Dict, Any, List
