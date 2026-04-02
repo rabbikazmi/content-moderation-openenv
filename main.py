@@ -11,7 +11,7 @@ violence, adult_content) across three difficulty levels.
 Port: 7860 (hardcoded for Hugging Face Spaces)
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -279,7 +279,7 @@ async def get_tasks() -> List[TaskSpec]:
     summary="Reset environment and start new episode",
     description="Reset the environment and start a new episode with specified task",
 )
-async def reset(request: ResetRequest) -> ContentObservation:
+async def reset(request: Optional[ResetRequest] = Body(default=None)) -> ContentObservation:
     """
     Reset the environment for a new episode.
 
@@ -287,7 +287,7 @@ async def reset(request: ResetRequest) -> ContentObservation:
     all episode state, and returns the first content sample to moderate.
 
     Args:
-        request: ResetRequest with optional task_id (defaults to task_1)
+        request: ResetRequest with optional task_id (defaults to task_1). Body is optional.
 
     Returns:
         ContentObservation: First content sample in the task
@@ -296,6 +296,9 @@ async def reset(request: ResetRequest) -> ContentObservation:
         HTTPException 422: If task_id is not one of the valid options
     """
     try:
+        # If no body is provided, use default ResetRequest with task_id="task_1"
+        if request is None:
+            request = ResetRequest()
         observation = env.reset(request.task_id)
         return observation
     except ValueError as e:
@@ -318,7 +321,7 @@ async def reset(request: ResetRequest) -> ContentObservation:
     summary="Execute one step in the environment",
     description="Submit a moderation action and receive reward, next observation, and episode status",
 )
-async def step(action: ModerationAction) -> StepResult:
+async def step(action: Optional[ModerationAction] = Body(default=None)) -> StepResult:
     """
     Execute one step in the moderation environment.
 
@@ -333,16 +336,23 @@ async def step(action: ModerationAction) -> StepResult:
     - Wrong label + confident (≥0.4): reward = 0.0
 
     Args:
-        action: ModerationAction with label and confidence score
+        action: ModerationAction with label and confidence score (required)
 
     Returns:
         StepResult: Contains next observation (if not done), reward, done flag, info dict
 
     Raises:
+        HTTPException 400: If action body not provided
         HTTPException 400: If environment not initialized (call /reset first)
         HTTPException 400: If episode already done (call /reset to start new)
         HTTPException 422: If label not valid enum value
     """
+    # Action body is required for /step
+    if action is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Action required. Provide label and confidence.",
+        )
     try:
         result = env.step(action)
         return result
