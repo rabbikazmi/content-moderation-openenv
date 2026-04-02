@@ -7,6 +7,7 @@ from main import app
 def main():
     """
     Entry point for the Content Moderation OpenEnv server.
+    Called by: python -m server.app or via 'serve' console script
     Runs the FastAPI application on 0.0.0.0:7860.
     """
     uvicorn.run(
