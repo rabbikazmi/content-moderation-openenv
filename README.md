@@ -260,6 +260,7 @@ Unlike seed-based reproducibility, this system enables **true RL**:
 - **Learning signal**: Future runs can analyze patterns in past errors
 
 Example memory structure:
+
 ```json
 {
   "total_runs": 9,
@@ -274,6 +275,7 @@ Example memory structure:
     "hate_speech": {"hate_speech": 18, "violence": 12}
   }
 }
+
 ```
 
 This enables agents to learn that violence/hate_speech are often confused and adjust strategies accordingly
