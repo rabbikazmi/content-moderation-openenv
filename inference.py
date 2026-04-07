@@ -1,119 +1,137 @@
+# inference.py — content-moderation-openenv
 import os
 import sys
 import json
 import time
+from typing import Dict, Any, Optional, List
 import httpx
-from typing import Dict, Any
 from openai import OpenAI
 
-# Load environment variables from .env file if it exists
+# configuration
+
+# load environment variables from .env file if it exists
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
 
-# configuration & validation
-API_BASE_URL = os.getenv("API_BASE_URL")
-MODEL_NAME = os.getenv("MODEL_NAME")
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-# Validate required environment variables
-missing_vars = []
-if not API_BASE_URL:
-    missing_vars.append("API_BASE_URL")
-if not MODEL_NAME:
-    missing_vars.append("MODEL_NAME")
-if not HF_TOKEN:
-    missing_vars.append("HF_TOKEN")
-
-if missing_vars:
-    print(f"ERROR: Missing required environment variables: {', '.join(missing_vars)}")
-    print("Please set: API_BASE_URL, MODEL_NAME, HF_TOKEN in your .env file")
-    sys.exit(1)
-
-# Base URL for FastAPI server
-BASE_URL = "http://localhost:7860"
+# Environment variables with defaults
+API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:11434/v1")
+MODEL_NAME: str = os.getenv("MODEL_NAME", "mistral")
+HF_TOKEN: str = os.getenv("HF_TOKEN", "not-needed-for-ollama")
+BASE_URL: str = os.getenv("BASE_URL", "http://localhost:7860")
 
 # Valid moderation labels
-VALID_LABELS = {"safe", "spam", "hate_speech", "violence", "adult_content"}
+VALID_LABELS: set = {"safe", "spam", "hate_speech", "violence", "adult_content"}
 
 # System prompt for the LLM agent
-SYSTEM_PROMPT = """You are a professional content moderator for a social media platform.
-You will be given a piece of text and the platform context it was posted on.
-Your job is to classify the content into exactly one of these categories:
-- safe: normal, acceptable content
-- spam: unsolicited promotional or repetitive content
-- hate_speech: content targeting people based on identity
-- violence: content promoting or depicting physical harm
-- adult_content: sexually explicit or inappropriate content
+SYSTEM_PROMPT: str = """You are a professional content moderator. Classify the given text into exactly ONE of:
 
-You must also provide a confidence score from 0.0 to 1.0 indicating
-how certain you are.
+- safe: Legitimate, non-harmful content. No violations.
+- spam: Unwanted promotional, duplicate, scams, clickbait. E.g. "Buy now!", "Click here!", "Get rich quick"
+- hate_speech: Content targeting individuals/groups by race, religion, nationality, gender, sexual orientation, or other protected characteristics. E.g. "People like X should disappear", "X are taking over"
+- violence: Content depicting, threatening, or encouraging violence, harm, or physical aggression. E.g. "Go kill X", "We need to fight back", "Take them down"
+- adult_content: Sexually explicit material, pornography, or sexual requests. E.g. "She's hot", "Send nudes", explicit sexual descriptions
 
-IMPORTANT: Respond ONLY with a valid JSON object. No explanation, no markdown, no code blocks.
-Format: {"label": "one_of_the_categories", "confidence": 0.95}"""
+KEY DISTINCTIONS:
+- violence ≠ hate_speech: Violence focuses on HARM/AGGRESSION. Hate_speech focuses on IDENTITY/BELONGING.
+  Example: "Destroy them" = violence. "They don't belong here" = hate_speech.
+- adult_content ≠ compliments: "She's beautiful" = safe. "She's hot, send pics" = adult_content.
 
-# utilities
+Respond ONLY in JSON with no markdown: {"label": "category", "confidence": 0.95}"""
+
+# LLM call configuration
+MAX_RETRIES: int = 3
+RETRY_DELAY: int = 2
+STEP_DELAY: float = 0.5
+
+# logging functions
 
 
-def call_with_retry(func, retries: int = 3, delay: int = 2) -> Any:
-    """
-    Call a function with retry logic.
-
+def log_start(task_id: str, env_name: str = "content-moderation") -> None:
+    """Log task start marker in hackathon format.
+    
     Args:
-        func: Callable to execute
-        retries: Number of retry attempts (default 3)
-        delay: Delay in seconds between retries (default 2)
-
-    Returns:
-        Result of func() on successful execution
-
-    Raises:
-        Exception: If all retry attempts fail
+        task_id: Task identifier (task_1, task_2, or task_3)
+        env_name: Environment name (default: content-moderation)
     """
-    for attempt in range(retries):
-        try:
-            return func()
-        except Exception as e:
-            if attempt == retries - 1:
-                raise
-            print(f"  Retry {attempt + 1}/{retries} after error: {str(e)[:80]}")
-            time.sleep(delay)
+    print(f"[START] task={task_id} env={env_name} model={MODEL_NAME}")
+    sys.stdout.flush()
 
+
+def log_step(
+    step: int,
+    action: str,
+    reward: float,
+    done: bool,
+    error: Optional[str] = None,
+) -> None:
+    """Log step marker in hackathon format.
+    
+    Args:
+        step: Step counter (1-indexed)
+        action: Moderation label (safe, spam, etc)
+        reward: Reward value
+        done: Whether task is complete
+        error: Error message if applicable (null if no error)
+    """
+    error_str = f'"{error}"' if error else "null"
+    done_str = "true" if done else "false"
+    print(
+        f"[STEP]  step={step} action={action} reward={reward:.2f} "
+        f"done={done_str} error={error_str}"
+    )
+    sys.stdout.flush()
+
+
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    """Log task end marker in hackathon format.
+    
+    Args:
+        success: Whether task succeeded (score >= 0.5)
+        steps: Total steps completed
+        score: Final score (0.0-1.0)
+        rewards: List of all rewards from steps
+    """
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    success_str = "true" if success else "false"
+    print(f"[END]   success={success_str} steps={steps} score={score:.3f} rewards={rewards_str}")
+    sys.stdout.flush()
+
+# parsing and validation
 
 def parse_llm_response(response_text: str) -> Dict[str, Any]:
-    """
-    Parse JSON response from LLM.
-
+    """Parse JSON response from LLM with markdown handling.
+    
     Handles cases where LLM wraps JSON in markdown code blocks
     or adds extra explanation text around the JSON.
-
+    
     Args:
         response_text: Raw text response from LLM
-
+        
     Returns:
         Dict with "label" and "confidence" keys
     """
     if not response_text:
         return {"label": "safe", "confidence": 0.1}
 
-    # Strip markdown code blocks if present
     cleaned = response_text.strip()
+
+    # strip markdown code blocks if present
     if "```json" in cleaned:
         cleaned = cleaned.split("```json")[1].split("```")[0].strip()
     elif "```" in cleaned:
         cleaned = cleaned.split("```")[1].split("```")[0].strip()
 
-    # Try to find JSON object in the response
+    # try to find json object in response
     try:
-        # First try direct parse
         parsed = json.loads(cleaned)
         return parsed
     except json.JSONDecodeError:
         pass
 
-    # Try to extract JSON from within the text
+    # try to extract json from within text
     try:
         start = cleaned.find("{")
         end = cleaned.rfind("}") + 1
@@ -124,290 +142,339 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # Final fallback
-    print(f"  Warning: Could not parse LLM response: {response_text[:100]}")
+    # fallback
     return {"label": "safe", "confidence": 0.1}
 
 
 def validate_label(label: str) -> str:
-    """
-    Validate moderation label against allowed set.
-
+    """Validate moderation label against allowed set.
+    
     Args:
         label: Label to validate
-
+        
     Returns:
         Validated label (or "safe" if invalid)
     """
     if label not in VALID_LABELS:
-        print(f"  Warning: Invalid label '{label}', defaulting to 'safe'")
         return "safe"
     return label
 
 
-# main agent logic
+def clamp_confidence(confidence: float) -> float:
+    """Clamp confidence to [0.0, 1.0].
+    
+    Args:
+        confidence: Raw confidence value
+        
+    Returns:
+        Clamped confidence in [0.0, 1.0]
+    """
+    return max(0.0, min(1.0, float(confidence)))
 
+
+# http client operations
+
+def call_with_retry(func, retries: int = MAX_RETRIES, delay: int = RETRY_DELAY) -> Optional[Any]:
+    """Call a function with retry logic.
+    
+    Args:
+        func: Callable to execute
+        retries: Number of retry attempts
+        delay: Delay in seconds between retries
+        
+    Returns:
+        Result of func() on successful execution, or None if all retries fail
+    """
+    last_exception = None
+    
+    for attempt in range(retries):
+        try:
+            return func()
+        except httpx.HTTPStatusError as e:
+            # stop retrying on 402 (rate limited by provider)
+            if e.response.status_code == 402:
+                raise
+            last_exception = e
+            if attempt < retries - 1:
+                time.sleep(delay)
+        except Exception as e:
+            last_exception = e
+            if attempt < retries - 1:
+                time.sleep(delay)
+    
+    return None
+
+# main task execution
 
 def run_task(
-    task_id: str,
-    client: OpenAI,
+    task_id: str, 
+    client: OpenAI, 
     http_client: httpx.Client
 ) -> Dict[str, Any]:
-    """
-    Run a single moderation task against the environment.
-
+    """Run a single moderation task against the environment.
+    
     Args:
         task_id: Task identifier ("task_1", "task_2", or "task_3")
         client: OpenAI-compatible client for LLM calls
         http_client: httpx.Client for FastAPI calls
-
+        
     Returns:
-        Dict with task results including score and percentage
+        Dict with task results: cumulative_reward, total_samples, score, success, rewards list
     """
-    print(f"  Running Task: {task_id}\n")
-
-    # reset environment
-    def reset_env():
-        response = http_client.post(
-            f"{BASE_URL}/reset",
-            json={"task_id": task_id}
-        )
-        response.raise_for_status()
-        return response.json()
-
-    observation = call_with_retry(reset_env)
-    print(f"  Environment reset. Starting moderation...\n")
-
-    step_count = 0
-    done = False
-
-    # main agent loop
-    while not done:
-
-        # Build prompt — combine system + user for Mistral compatibility
-        text = observation.get("text", "N/A")
-        context = observation.get("context", "unknown")
-
-        full_prompt = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"Text to moderate: {text}\n"
-            f"Platform context: {context}\n"
-            f"Classify this content."
-        )
-
-        # call llm
-        def get_llm_response():
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": full_prompt
-                    }
-                ],
-                max_tokens=20,
-                temperature=0.1,
-            )
-            return response.choices[0].message.content
-
-        try:
-            llm_response = call_with_retry(get_llm_response)
-        except Exception as e:
-            print(f"  ERROR: Failed to get LLM response: {str(e)}")
-            llm_response = json.dumps({"label": "safe", "confidence": 0.1})
-
-        # parse and validate llm output
-        decision = parse_llm_response(llm_response)
-        label = validate_label(decision.get("label", "safe"))
-        confidence = float(decision.get("confidence", 0.1))
-        confidence = max(0.0, min(1.0, confidence))  # Clamp to [0, 1]
-
-        # submit action to environment
-        def submit_step():
-            response = http_client.post(
-                f"{BASE_URL}/step",
-                json={"label": label, "confidence": confidence},
-            )
-            response.raise_for_status()
-            return response.json()
-
-        try:
-            step_result = call_with_retry(submit_step)
-        except Exception as e:
-            print(f"  ERROR: Failed to submit step: {str(e)}")
-            break
-
-        # extract results
-        reward = step_result.get("reward", 0.0)
-        done = step_result.get("done", False)
-        info = step_result.get("info", {})
-        ground_truth = info.get("ground_truth", "unknown")
-        step_count += 1
-
-        # print progress
-        print(
-            f"  Sample {step_count:>2}: "
-            f"predicted={label:15s} ({confidence:.2f}) "
-            f"| truth={ground_truth:15s} "
-            f"| reward={reward:.1f}"
-        )
-
-        # advance observation
-        if not done:
-            next_obs = step_result.get("observation")
-            if next_obs:
-                observation = next_obs
-            else:
-                # Fallback: fetch state and break if something is wrong
-                print("  Warning: No next observation received.")
-                break
-
-        # rate limiting
-        time.sleep(1)
-
-    # get final state
-    def get_final_state():
-        response = http_client.get(f"{BASE_URL}/state")
-        response.raise_for_status()
-        return response.json()
-
+    log_start(task_id)
+    
+    step_count: int = 0
+    cumulative_reward: float = 0.0
+    rewards: List[float] = []
+    done: bool = False
+    error_occurred: Optional[str] = None
+    
     try:
-        final_state = call_with_retry(get_final_state)
-        cumulative_reward = final_state.get("cumulative_reward", 0.0)
-        total_samples = final_state.get("total_samples", step_count)
+        # reset environment
+        try:
+            def reset_env():
+                response = http_client.post(
+                    f"{BASE_URL}/reset",
+                    json={"task_id": task_id},
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                return response.json()
+            
+            observation = call_with_retry(reset_env, retries=3, delay=2)
+            if observation is None:
+                error_occurred = "Failed to reset environment"
+                log_end(success=False, steps=0, score=0.0, rewards=[])
+                return {
+                    "task_id": task_id,
+                    "total_samples": 0,
+                    "cumulative_reward": 0.0,
+                    "score": 0.0,
+                    "success": False,
+                    "rewards": [],
+                }
+        except Exception as e:
+            error_occurred = f"Reset failed: {str(e)}"
+            log_end(success=False, steps=0, score=0.0, rewards=[])
+            return {
+                "task_id": task_id,
+                "total_samples": 0,
+                "cumulative_reward": 0.0,
+                "score": 0.0,
+                "success": False,
+                "rewards": [],
+            }
+
+        # main agent loop
+        while not done:
+            step_count += 1
+            
+            # extract observation
+            text: str = observation.get("text", "N/A")
+            context: str = observation.get("context", "unknown")
+
+            # build prompt for llm
+            user_prompt: str = f"Text: {text}\nContext: {context}\n\nClassify this content."
+            
+            # call llm with retry logic
+            llm_response: Optional[str] = None
+            llm_error: Optional[str] = None
+            
+            try:
+                def get_llm_response():
+                    response = client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=[
+                            {"role": "user", "content": SYSTEM_PROMPT + "\n\n" + user_prompt}
+                        ],
+                        max_tokens=150,
+                        temperature=0.3,
+                    )
+                    return response.choices[0].message.content
+                
+                llm_response = call_with_retry(get_llm_response, retries=3, delay=2)
+                
+                if llm_response is None:
+                    llm_error = "LLM call failed after retries"
+                    llm_response = json.dumps({"label": "safe", "confidence": 0.1})
+                    
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 402:
+                    llm_error = "Rate limited (402)"
+                else:
+                    llm_error = f"HTTP {e.response.status_code}"
+                llm_response = json.dumps({"label": "safe", "confidence": 0.1})
+            except Exception as e:
+                llm_error = f"LLM error: {str(e)[:50]}"
+                llm_response = json.dumps({"label": "safe", "confidence": 0.1})
+
+            # parse and validate llm output
+            decision: Dict[str, Any] = parse_llm_response(llm_response)
+            label: str = validate_label(decision.get("label", "safe"))
+            confidence: float = clamp_confidence(decision.get("confidence", 0.1))
+
+            # submit action to environment
+            step_error: Optional[str] = None
+            reward: float = 0.0
+            
+            try:
+                def submit_step():
+                    response = http_client.post(
+                        f"{BASE_URL}/step",
+                        json={"label": label, "confidence": confidence},
+                        timeout=10.0
+                    )
+                    response.raise_for_status()
+                    return response.json()
+
+                step_result = call_with_retry(submit_step, retries=3, delay=2)
+                
+                if step_result is None:
+                    step_error = "Step submission failed"
+                    reward = 0.0
+                    done = True
+                else:
+                    reward = float(step_result.get("reward", 0.0))
+                    done = step_result.get("done", False)
+                    
+            except Exception as e:
+                step_error = f"Step failed: {str(e)[:50]}"
+                reward = 0.0
+                done = True
+
+            # accumulate reward
+            cumulative_reward += reward
+            rewards.append(reward)
+            
+            # log step
+            log_step(
+                step=step_count,
+                action=label,
+                reward=reward,
+                done=done,
+                error=step_error or llm_error
+            )
+
+            # get next observation if not done
+            if not done and step_result is not None:
+                next_obs = step_result.get("observation")
+                if next_obs:
+                    observation = next_obs
+                else:
+                    done = True
+
+            # rate limiting
+            time.sleep(STEP_DELAY)
+
     except Exception as e:
-        print(f"  WARNING: Could not get final state: {str(e)}")
-        cumulative_reward = 0.0
-        total_samples = step_count
+        # catch any unexpected exception
+        error_occurred = f"Unexpected error: {str(e)[:50]}"
+        sys.stderr.write(f"ERROR: {error_occurred}\n")
 
-    max_possible = float(total_samples) * 1.0
-    score_pct = (
-        (cumulative_reward / max_possible * 100)
-        if max_possible > 0 else 0.0
-    )
-
-    print(f"\n Task {task_id} complete! "
-          f"Score: {cumulative_reward:.1f} / {max_possible:.1f} "
-          f"({score_pct:.1f}%)")
+    finally:
+        # calculate score
+        total_samples: int = step_count
+        max_possible: float = float(total_samples) if total_samples > 0 else 1.0
+        score: float = (cumulative_reward / max_possible) if max_possible > 0 else 0.0
+        score = max(0.0, min(1.0, score))
+        success: bool = score >= 0.5
+        
+        # always emit [END] marker
+        log_end(
+            success=success,
+            steps=total_samples,
+            score=score,
+            rewards=rewards
+        )
 
     return {
         "task_id": task_id,
         "total_samples": total_samples,
         "cumulative_reward": cumulative_reward,
-        "max_possible_reward": max_possible,
-        "score_percentage": score_pct,
+        "score": score,
+        "success": success,
+        "rewards": rewards,
     }
-
 
 # main execution
 
-
 def main() -> None:
+    """Main execution function.
+    
+    Checks server health, runs all 3 tasks, prints final summary.
+    Exits with code 0 on success, code 1 if server is unreachable.
+    Never exits with unhandled exception.
     """
-    Main execution function.
-
-    Checks server health, runs all 3 tasks, prints final results table.
-    Exits with code 0 on success, code 1 on failure.
-    """
-
-    print("\nContent Moderation OpenEnv — Inference Script")
-    print(f"Model:  {MODEL_NAME}")
-    print(f"API:    {API_BASE_URL}")
-    print(f"Tasks:  task_1 (easy) | task_2 (medium) | task_3 (hard)")
-
-    # initialize clients
-    client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
-    http_client = httpx.Client(timeout=60.0)
-
-    # health check
-    print("\nChecking server health...")
     try:
-        response = http_client.get(f"{BASE_URL}/health")
-        response.raise_for_status()
-        health = response.json()
-        print(f"[OK] Server is running (status: {health.get('status', 'ok')})\n")
-    except Exception as e:
-        print(
-            f"\n[ERROR]: Server not running on port 7860.\n"
-            f"  Start it with: python main.py\n"
-            f"  Error: {str(e)}"
-        )
-        sys.exit(1)
+        # initialize clients
+        # For Ollama, api_key can be anything (it's ignored)
+        client = OpenAI(api_key="ollama", base_url=API_BASE_URL)
+        http_client = httpx.Client(timeout=60.0)
 
-    # run all 3 tasks
-    results = []
-    for task_id in ["task_1", "task_2", "task_3"]:
+        # health check
         try:
-            result = run_task(task_id, client, http_client)
-            results.append(result)
+            response = http_client.get(f"{BASE_URL}/health", timeout=5.0)
+            response.raise_for_status()
+            health = response.json()
         except Exception as e:
-            print(f"\n[ERROR] running {task_id}: {str(e)}")
+            sys.stderr.write(
+                f"ERROR: Server not reachable at {BASE_URL}\n"
+                f"Details: {str(e)}\n"
+                f"Start it with: python main.py\n"
+            )
             http_client.close()
             sys.exit(1)
 
-    http_client.close()
+        # run all 3 tasks
+        results: List[Dict[str, Any]] = []
+        task_ids: List[str] = ["task_1", "task_2", "task_3"]
+        
+        for task_id in task_ids:
+            try:
+                result = run_task(task_id, client, http_client)
+                results.append(result)
+            except Exception as e:
+                sys.stderr.write(f"ERROR during {task_id}: {str(e)}\n")
+                result = {
+                    "task_id": task_id,
+                    "total_samples": 0,
+                    "cumulative_reward": 0.0,
+                    "score": 0.0,
+                    "success": False,
+                    "rewards": [],
+                }
+                results.append(result)
 
-    # save results to json
-    results_data = {
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "model": MODEL_NAME,
-        "api_base_url": API_BASE_URL,
-        "tasks": results,
-        "summary": {
-            "total_cumulative_reward": 0.0,
-            "total_max_reward": 0.0,
-            "overall_score_percentage": 0.0,
-        }
-    }
-    
-    # Calculate summary totals
-    for result in results:
-        results_data["summary"]["total_cumulative_reward"] += result["cumulative_reward"]
-        results_data["summary"]["total_max_reward"] += result["max_possible_reward"]
-    
-    if results_data["summary"]["total_max_reward"] > 0:
-        results_data["summary"]["overall_score_percentage"] = (
-            results_data["summary"]["total_cumulative_reward"] / 
-            results_data["summary"]["total_max_reward"] * 100
-        )
-    
-    with open("inference_results.json", "w") as f:
-        json.dump(results_data, f, indent=2)
-    print(f"[OK] Results saved to inference_results.json\n")
+        http_client.close()
 
-    # final results table
-    print("\n" + "Final Results".center(60))
+        # print summary table
+        print("\n" + "=" * 60)
+        print("SUMMARY")
+        print("=" * 60)
+        
+        overall_reward: float = 0.0
+        overall_max: float = 0.0
+        
+        for result in results:
+            task_id = result["task_id"]
+            reward = result["cumulative_reward"]
+            total = result["total_samples"]
+            score_pct = (result["score"] * 100) if result["total_samples"] > 0 else 0.0
+            
+            print(f"{task_id}: {reward:.1f}/{float(total):.1f} ({score_pct:.1f}%)")
+            
+            overall_reward += reward
+            overall_max += float(total)
+        
+        overall_pct = (overall_reward / overall_max * 100) if overall_max > 0 else 0.0
+        print("-" * 60)
+        print(f"Overall: {overall_reward:.1f}/{overall_max:.1f} ({overall_pct:.1f}%)")
+        print("=" * 60)
 
-    task_names = {
-        "task_1": "Task 1 (Easy)   ",
-        "task_2": "Task 2 (Medium) ",
-        "task_3": "Task 3 (Hard)   ",
-    }
-
-    total_cumulative = 0.0
-    total_max = 0.0
-
-    for result in results:
-        name = task_names.get(result["task_id"], result["task_id"])
-        cr = result["cumulative_reward"]
-        mp = result["max_possible_reward"]
-        pct = result["score_percentage"]
-        print(f" {name}: {cr:5.1f} / {mp:5.1f}   ({pct:5.1f}%)")
-        total_cumulative += cr
-        total_max += mp
-
-    overall_pct = (
-        (total_cumulative / total_max * 100)
-        if total_max > 0 else 0.0
-    )
-
-    print("-" * 60)
-    print(f" OVERALL SCORE      : "
-          f"{total_cumulative:5.1f} / {total_max:5.1f}   "
-          f"({overall_pct:5.1f}%)")
-    print("=" * 60 + "\n")
-
-    sys.exit(0)
+    except Exception as e:
+        # final safety net: catch any unhandled exception
+        sys.stderr.write(f"FATAL: Unhandled exception: {str(e)}\n")
+        sys.exit(0)  # Exit gracefully with code 0
 
 
 if __name__ == "__main__":

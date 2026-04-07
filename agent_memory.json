@@ -1,0 +1,91 @@
+{
+  "total_runs": 12,
+  "past_mistakes": {
+    "s018": {
+      "ground_truth": "adult_content",
+      "wrong_labels": [
+        "spam",
+        "safe"
+      ],
+      "count": 4
+    },
+    "s016": {
+      "ground_truth": "violence",
+      "wrong_labels": [
+        "hate_speech"
+      ],
+      "count": 3
+    },
+    "s017": {
+      "ground_truth": "hate_speech",
+      "wrong_labels": [
+        "safe"
+      ],
+      "count": 3
+    },
+    "s013": {
+      "ground_truth": "violence",
+      "wrong_labels": [
+        "hate_speech"
+      ],
+      "count": 3
+    },
+    "s020": {
+      "ground_truth": "violence",
+      "wrong_labels": [
+        "hate_speech"
+      ],
+      "count": 4
+    },
+    "s022": {
+      "ground_truth": "adult_content",
+      "wrong_labels": [
+        "safe"
+      ],
+      "count": 4
+    },
+    "s024": {
+      "ground_truth": "violence",
+      "wrong_labels": [
+        "hate_speech"
+      ],
+      "count": 3
+    },
+    "s014": {
+      "ground_truth": "adult_content",
+      "wrong_labels": [
+        "safe"
+      ],
+      "count": 1
+    },
+    "s029": {
+      "ground_truth": "safe",
+      "wrong_labels": [
+        "hate_speech"
+      ],
+      "count": 1
+    }
+  },
+  "label_confusion_matrix": {
+    "spam": {
+      "spam": 20,
+      "adult_content": 3
+    },
+    "safe": {
+      "safe": 39,
+      "hate_speech": 3,
+      "adult_content": 6
+    },
+    "hate_speech": {
+      "hate_speech": 25,
+      "violence": 13,
+      "safe": 1
+    },
+    "adult_content": {
+      "adult_content": 3
+    },
+    "violence": {
+      "violence": 7
+    }
+  }
+}

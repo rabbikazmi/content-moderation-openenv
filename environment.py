@@ -1,4 +1,6 @@
 import random
+import json
+import os
 from typing import Optional, List, Dict, Any
 from models import ContentObservation, ModerationAction, StepResult, EnvironmentState, TaskSpec
 import logging
@@ -237,6 +239,7 @@ class ContentModerationEnv:
         
         Organizes the 30 samples by difficulty level for task selection.
         Sets up environment state variables.
+        Loads experience memory from disk if available.
         """
         self.dataset = DATASET
         
@@ -253,7 +256,80 @@ class ContentModerationEnv:
         self.done: bool = False
         self.initialized: bool = False
         
+        # Experience replay memory — persisted across runs
+        self.memory_file = "agent_memory.json"
+        self.experience_memory = self._load_memory()
+        
         logger.info("ContentModerationEnv initialized")
+
+    def _load_memory(self) -> Dict[str, Any]:
+        """Load experience memory from disk or create new memory structure.
+        
+        Returns:
+            Dict with structure:
+            {
+                "total_runs": int,
+                "past_mistakes": {
+                    "sample_id": {"ground_truth": str, "wrong_labels": [str], "count": int},
+                    ...
+                },
+                "label_confusion_matrix": {
+                    "predicted_label": {"actual_label": count, ...},
+                    ...
+                }
+            }
+        """
+        if os.path.exists(self.memory_file):
+            try:
+                with open(self.memory_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"Could not load memory: {e}")
+        
+        return {
+            "total_runs": 0,
+            "past_mistakes": {},
+            "label_confusion_matrix": {}
+        }
+
+    def _save_memory(self) -> None:
+        """Persist experience memory to disk for next run."""
+        try:
+            with open(self.memory_file, 'w') as f:
+                json.dump(self.experience_memory, f, indent=2)
+            logger.info(f"Memory saved: {len(self.experience_memory['past_mistakes'])} mistakes tracked")
+        except Exception as e:
+            logger.warning(f"Could not save memory: {e}")
+
+    def _record_prediction(self, sample_id: str, ground_truth: str, predicted_label: str, correct: bool) -> None:
+        """Record a prediction for future learning.
+        
+        Args:
+            sample_id: ID of the sample
+            ground_truth: Correct label
+            predicted_label: Model's predicted label
+            correct: Whether prediction was correct
+        """
+        # Track confusion matrix
+        if predicted_label not in self.experience_memory["label_confusion_matrix"]:
+            self.experience_memory["label_confusion_matrix"][predicted_label] = {}
+        
+        confusion = self.experience_memory["label_confusion_matrix"][predicted_label]
+        confusion[ground_truth] = confusion.get(ground_truth, 0) + 1
+        
+        # Track mistakes for hard samples
+        if not correct:
+            if sample_id not in self.experience_memory["past_mistakes"]:
+                self.experience_memory["past_mistakes"][sample_id] = {
+                    "ground_truth": ground_truth,
+                    "wrong_labels": [],
+                    "count": 0
+                }
+            
+            mistake = self.experience_memory["past_mistakes"][sample_id]
+            if predicted_label not in mistake["wrong_labels"]:
+                mistake["wrong_labels"].append(predicted_label)
+            mistake["count"] += 1
 
     def reset(self, task_id: str = "task_1") -> ContentObservation:
         """Reset the environment for a new episode.
@@ -293,12 +369,11 @@ class ContentModerationEnv:
         else:  # hard
             self.current_samples = self.hard_samples.copy()
         
-        # Shuffle deterministically with seed 42 for reproducibility
-        random.seed(42)
+        # Shuffle randomly (no fixed seed) for true RL variability
         random.shuffle(self.current_samples)
         
-        # Limit to 7 samples per task
-        self.current_samples = self.current_samples[:7]
+        # Limit to 10 samples per task (increased from 7)
+        self.current_samples = self.current_samples[:10]
         
         # Reset state
         self.current_task_id = task_id
@@ -307,7 +382,10 @@ class ContentModerationEnv:
         self.done = False
         self.initialized = True
         
-        logger.info(f"Environment reset. Task: {task_id}, Samples: {len(self.current_samples)}")
+        # Track new run in memory
+        self.experience_memory["total_runs"] += 1
+        
+        logger.info(f"Environment reset. Task: {task_id}, Samples: {len(self.current_samples)}, Run #{self.experience_memory['total_runs']}")
         
         # Return first sample as observation
         first_sample = self.current_samples[self.current_index]
@@ -353,6 +431,14 @@ class ContentModerationEnv:
         label_correct = action.label.value == ground_truth_label
         confidence = action.confidence
         
+        # Record prediction in memory for future learning
+        self._record_prediction(
+            sample_id=current_sample["id"],
+            ground_truth=ground_truth_label,
+            predicted_label=action.label.value,
+            correct=label_correct
+        )
+        
         if label_correct and confidence >= 0.7:
             reward = 1.0
         elif label_correct and confidence < 0.7:
@@ -389,6 +475,11 @@ class ContentModerationEnv:
             f"Step {self.current_index}: action={action.label.value}, "
             f"truth={ground_truth_label}, confidence={confidence}, reward={reward}"
         )
+        
+        # Save memory if episode is done
+        if self.done:
+            self._save_memory()
+            logger.info(f"Episode complete. Memory persisted for next run.")
         
         return StepResult(
             observation=next_observation,
