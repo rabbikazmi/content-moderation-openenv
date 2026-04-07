@@ -16,10 +16,10 @@ class Config:
     
     MODEL_NAME: str = os.getenv(
         "MODEL_NAME",
-        "meta-llama/Llama-2-7b-hf"
+        "Qwen/Qwen2.5-7B-Instruct"
     )
     
-    HF_TOKEN: Optional[str] = os.getenv("HF_TOKEN", None)
+    HF_TOKEN: Optional[str] = os.getenv("HF_TOKEN", "<your-hf-token>")
     
     # Server Configuration
     SERVER_HOST: str = "0.0.0.0"
