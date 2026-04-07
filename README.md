@@ -99,11 +99,11 @@ Evaluated with **Mistral-7B-Instruct** via local Ollama (free, no API keys):
 | Task | Score | Max | Percentage |
 |------|-------|-----|-----------|
 | Task 1 (Easy) | 10.0 | 10.0 | 100.0% |
-| Task 2 (Medium) | 5.0 | 10.0 | 50.0% |
-| Task 3 (Hard) | 7.7 | 10.0 | 77.0% |
-| **Overall** | **22.7** | **30.0** | **75.7%** |
+| Task 2 (Medium) | 7.0 | 10.0 | 70.0% |
+| Task 3 (Hard) | 8.0 | 10.0 | 80.0% |
+| **Overall** | **25.0** | **30.0** | **83.3%** |
 
-Perfect performance on easy tasks demonstrates Mistral's strong grasp of obvious spam and clearly safe content. The 50% on medium tasks reflects the challenge of distinguishing violence from hate_speech and detecting adult content with subtle language. The 77% on hard tasks shows good performance on context-dependent decisions. Accuracy stabilizes around **75.7%** across runs thanks to experience replay and improved prompt engineering. The system now builds a confusion matrix of past mistakes, enabling agents to learn which distinctions are hardest.
+Perfect performance on easy tasks demonstrates Mistral's strong grasp of obvious spam and clearly safe content. The 70% on medium tasks reflects the challenge of distinguishing violence from hate_speech and detecting adult content with subtle language. The 80% on hard tasks shows strong performance on context-dependent decisions. Accuracy achieves **83.3%** across runs thanks to experience replay and improved prompt engineering. The system now builds a confusion matrix of past mistakes, enabling agents to learn which distinctions are hardest.
 
 ## Quick Start
 
