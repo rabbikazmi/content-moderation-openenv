@@ -6,7 +6,7 @@ colorTo: red
 sdk: docker
 pinned: false
 ---
-# Content Moderation OpenEnv
+# TrustMod: Content Moderation OpenEnv
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104-green.svg)](https://fastapi.tiangolo.com/)
