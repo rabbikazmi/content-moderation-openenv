@@ -175,13 +175,15 @@ Should display: `20 / 20 checks passed`.
 ## Docker Guide
 Note: This setup runs the FastAPI server in Docker. You'll need Ollama running on your host machine:
 
-```bash
-# Terminal 1: Start Ollama
+### Terminal 1: Start Ollama
+```
 ollama serve
+```
 
-# Terminal 2: Build and run the Docker container
+### Terminal 2: Build and run the Docker container
 docker build -t content-moderation-openenv:latest .
 
+```
 docker run \
   -p 7860:7860 \
   -e API_BASE_URL="http://host.docker.internal:11434/v1" \
@@ -198,10 +200,10 @@ docker-compose up
 ```
 
 Note: You'll still need Ollama running on your host.ker-compose up
-```
 
 ## Environment Variables
-fault | Description |
+
+Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `API_BASE_URL` | No | `http://localhost:11434/v1` | Ollama API endpoint (local Mistral) |
 | `MODEL_NAME` | No | `mistral` | LLM model name (local Ollama) |
@@ -211,7 +213,7 @@ fault | Description |
 **No external API keys required!** Everything runs locally. To use a cloud model instead:
 1. Set `API_BASE_URL` to your provider's endpoint (e.g., HuggingFace Inference API)
 2. Set `MODEL_NAME` to the model identifier
-3. Provide your API token in `HF_TOKENssion
+3. Provide your API token in `HF_TOKEN
 4. Copy token to `.env`
 
 ## API Reference
