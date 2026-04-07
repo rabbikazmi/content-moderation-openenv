@@ -18,6 +18,7 @@ except ImportError:
 
 # Environment variables with defaults
 API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:11434/v1")
+API_KEY: str = os.getenv("API_KEY", "not-set")
 MODEL_NAME: str = os.getenv("MODEL_NAME", "mistral")
 HF_TOKEN: str = os.getenv("HF_TOKEN", "not-needed-for-ollama")
 BASE_URL: str = os.getenv("BASE_URL", "http://localhost:7860")
@@ -406,9 +407,9 @@ def main() -> None:
     Never exits with unhandled exception.
     """
     try:
-        # initialize clients
-        # For Ollama, api_key can be anything (it's ignored)
-        client = OpenAI(api_key="ollama", base_url=API_BASE_URL)
+        # initialize clients using environment variables
+        # Use the API_KEY and API_BASE_URL injected by the LiteLLM proxy
+        client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
         http_client = httpx.Client(timeout=60.0)
 
         # health check
